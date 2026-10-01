@@ -1,0 +1,47 @@
+name: Deploy infra
+
+on:
+  workflow_dispatch:
+    inputs:
+      location:
+        description: 'Azure region for the deployment stack'
+        required: false
+        default: 'northeurope'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Validate deployment stack
+        run: |
+          az stack sub validate \
+            --name infra-stack \
+            --location "${{ inputs.location }}" \
+            --template-file infra/main.bicep \
+            --parameters infra/main.bicepparam \
+            --action-on-unmanage deleteAll \
+            --deny-settings-mode none
+
+      # stateful deployment: resources dropped from the template are deleted on redeploy
+      - name: Deploy infra as a deployment stack
+        run: |
+          az stack sub create \
+            --name infra-stack \
+            --location "${{ inputs.location }}" \
+            --template-file infra/main.bicep \
+            --parameters infra/main.bicepparam \
+            --action-on-unmanage deleteAll \
+            --deny-settings-mode none \
+            --yes
